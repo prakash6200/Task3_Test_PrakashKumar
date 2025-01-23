@@ -13,10 +13,6 @@ class CustomErrorHandler extends Error {
         return new CustomErrorHandler(401, message);  
     }
 
-    static lowBalance(message) {
-        return new CustomErrorHandler(401, message);  
-    }
-
     static unAuthorized(message = "UnAuthorized! Access") { 
         return new CustomErrorHandler(401, message); 
     }

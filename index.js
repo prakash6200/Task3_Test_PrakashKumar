@@ -2,7 +2,6 @@ require("./config/db.config");
 const cors = require("cors");
 const path = require("path");
 const morgan = require("morgan");
-const cron = require("node-cron");
 const express = require("express");
 const router = require("./router");
 const config = require("./config/config");
@@ -21,7 +20,7 @@ app.use("/", router);
 app.use((request, response) => {
     response.type("text/plain");
     response.status(404);
-    response.send({ success: true, message: "Server Working. But Api Not Found." }); 
+    response.send({ success: true, message: "Server is Working." }); 
 });
 
 server.listen(config.PORT, () => {
