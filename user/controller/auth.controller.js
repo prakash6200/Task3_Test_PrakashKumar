@@ -104,7 +104,7 @@ module.exports.signUp = async (request, response) => {
 
 module.exports.login = async (request, response) => {
     try {
-        const { email, mobile, password } = request.body;
+        const { email, mobile, password, mobileOtp} = request.body;
 
         // Determine identifier
         const identifier = email ? { email: email.toLowerCase().trim() } : { mobile };
@@ -183,6 +183,42 @@ module.exports.login = async (request, response) => {
             throw CustomErrorHandler.wrongCredentials("Wrong Password!");
         }
 
+        if(userData.mobileOtp == null){
+            const otp = generateOtp()
+
+            await utils.sendOtpOnMobile(userData.mobile, otp)
+            userData.mobileOtp = otp;
+            userData.otpTime = new Date();
+            await userData.save();
+
+            return response.json({
+                status: true,
+                message: "Otp send on mobile",
+                data: '',
+            });
+        }
+
+        if (userData.mobileOtp !== mobileOtp) {
+            return response.status(400).json({
+                status: false,
+                message: "Invalid OTP.",
+            });
+        }
+
+        // Check OTP expiration (e.g., valid for 10 minutes)
+        const otpExpiryTime = 10 * 60 * 1000; // 10 minutes in milliseconds
+        const timeElapsed = Date.now() - new Date(userData.otpTime).getTime();
+
+        if (timeElapsed > otpExpiryTime) {
+            return response.status(400).json({
+                status: false,
+                message: "OTP has expired. Please request a new OTP.",
+            });
+        }
+
+        userData.mobileOtp = null; // Clear the OTP after successful verification
+        userData.otpTime = null; // Clear the OTP timestamp
+  
         // Successful login: reset login attempts
         if (loginAttempt) {
             await LoginAttemptsModel.deleteOne(identifier);

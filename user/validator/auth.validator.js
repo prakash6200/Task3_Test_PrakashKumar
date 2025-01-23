@@ -28,6 +28,7 @@ module.exports.login = async (request, response, next) => {
     const rules = Joi.object().keys({
         email: Joi.string().email(),
         mobile: Joi.string(),
+        mobileOtp: Joi.string(),
         password: Joi.string().required(),
     }).or('email', 'mobile');
     const { error } = rules.validate(request.body);
