@@ -24,25 +24,6 @@ async function getUniqueUserReferralCode(referral) {
     });
 }
 
-module.exports.referralInfo = async (request, response) => {
-    try {
-        const { referralCode } = request.query;
-
-        userData = await UserModel.findOne({
-            referralCode,
-        });
-        if(!userData) throw CustomErrorHandler.notFound("Enter a valid referral Code!");
-
-        return response.status(200).json({
-            status: true,
-            message: "Referral Code Details.",
-            data: { email: userData.email, name: userData.name }
-        });
-    } catch (e) {
-        handleErrorResponse(e, response);
-    }
-};
-
 module.exports.signUp = async (request, response) => {
     try {
         const { referral, name, email, mobile, password, cnfPassword, dob, isWhatsapp, isTelegram } = request.body;
@@ -125,15 +106,17 @@ module.exports.login = async (request, response) => {
     try {
         const { email, mobile, password } = request.body;
 
+        // Determine identifier
         const identifier = email ? { email: email.toLowerCase().trim() } : { mobile };
         const maxAttempts = 5;
         const lockoutTime = 60 * 60 * 1000; // 1 hour in milliseconds
 
+        // Check login attempts
         let loginAttempt = await LoginAttemptsModel.findOne(identifier);
         if (loginAttempt) {
             const timeSinceLastAttempt = Date.now() - loginAttempt.lastAttemptAt.getTime();
 
-            // Reset attempts if the lockout period has passed
+            // Reset attempts if lockout period has passed
             if (timeSinceLastAttempt > lockoutTime) {
                 loginAttempt.attempts = 0;
                 loginAttempt.lastAttemptAt = new Date();
@@ -148,24 +131,26 @@ module.exports.login = async (request, response) => {
             }
         }
 
+        // Find user
         const userData = await UserModel.findOne({
             $or: [
-                { 
-                    email: email?email.toLowerCase().trim():email, 
+                {
+                    email: email ? email.toLowerCase().trim() : email,
                     role: "USER",
-                    isDeleted: false, 
+                    isDeleted: false,
                 },
-                { 
-                    mobile: mobile, 
+                {
+                    mobile: mobile,
                     role: "USER",
-                    isDeleted: false, 
+                    isDeleted: false,
                 }
             ]
         }).select("+password");
 
+        // Handle non-existent user
         if (!userData) {
             if (!loginAttempt) {
-                loginAttempt = new LoginAttempt({ ...identifier, attempts: 1 });
+                loginAttempt = new LoginAttemptsModel({ ...identifier, attempts: 1 });
             } else {
                 loginAttempt.attempts += 1;
                 loginAttempt.lastAttemptAt = new Date();
@@ -175,30 +160,43 @@ module.exports.login = async (request, response) => {
             throw CustomErrorHandler.wrongCredentials(mobile ? "Mobile not found!" : "Email not found!");
         }
 
-        if (!userData) {
-            throw CustomErrorHandler.wrongCredentials(mobile ? "Mobile not found!" : "Email not found!");
-        };
-
+        // Check user verification
         if (!userData.isMobileVerified) {
             throw CustomErrorHandler.unAuthorized("Mobile not verified!");
-        };
+        }
 
         if (userData.role === "ADMIN") {
             throw CustomErrorHandler.unAuthorized();
-        };
+        }
 
+        // Validate password
         const checkPassword = await bcrypt.compare(password, userData.password);
         if (!checkPassword) {
-            throw CustomErrorHandler.wrongCredentials("Wrong Password!");
-        };
+            if (!loginAttempt) {
+                loginAttempt = new LoginAttemptsModel({ ...identifier, attempts: 1 });
+            } else {
+                loginAttempt.attempts += 1;
+                loginAttempt.lastAttemptAt = new Date();
+            }
+            await loginAttempt.save();
 
+            throw CustomErrorHandler.wrongCredentials("Wrong Password!");
+        }
+
+        // Successful login: reset login attempts
+        if (loginAttempt) {
+            await LoginAttemptsModel.deleteOne(identifier);
+        }
+
+        // Update user login timestamp
         userData.lastLogin = Math.floor(Date.now() / 1000);
         await userData.save();
 
+        // Sanitize user data for the response
         const sanitizedUserData = { ...userData.toObject() };
-        delete sanitizedUserData.profileImage;
         delete sanitizedUserData.password;
 
+        // Generate JWT token
         const token = jwt.sign(JSON.stringify(sanitizedUserData), config.JWT_AUTH_TOKEN);
 
         return response.json({
@@ -210,6 +208,11 @@ module.exports.login = async (request, response) => {
         handleErrorResponse(e, response);
     }
 };
+
+function generateOtp() {
+    const otp = Math.floor(100000 + Math.random() * 900000); // Generates a random 6-digit number
+    return otp.toString(); // Convert to string if needed
+}
 
 // Send Otp for Verify Email or Mobile
 module.exports.sendOtp = async (request, response) => {
@@ -225,8 +228,19 @@ module.exports.sendOtp = async (request, response) => {
             throw CustomErrorHandler.wrongCredentials("Mobile not found!");
         };
 
+        const otp = generateOtp()
+
+        userData.mobileOtp = otp;
+        userData.otpTime = new Date();
+        await userData.save();
+
         const message = isTelegram == "true" ? "Otp send on telegram": "Otp send on mobile";
-        // await utils.sendOtpOnMobile(userData.mobile);
+        
+        if (isTelegram == "true") {
+            await utils.sendOtpOnTelegram(mobile, otp);
+        } else {
+            await utils.sendOtpOnMobile(mobile, otp);
+        }
 
         return response.status(200).json({
             status: true,
@@ -238,45 +252,49 @@ module.exports.sendOtp = async (request, response) => {
     }
 };
 
-// Verify Email or Password
+
 module.exports.verifyOtp = async (request, response) => {
     try {
-        const { mobile, email, otp } = request.body;
+        const { mobile, otp } = request.body;
 
+        // Find user
         const userData = await UserModel.findOne({
-            $or: [
-                { 
-                    email: email?email.toLowerCase().trim():email, 
-                    isDeleted: false, 
-                },
-                { 
-                    mobile: mobile, 
-                    isDeleted: false, 
-                }
-            ]
+            mobile: mobile,
+            isDeleted: false,
         });
+
         if (!userData) {
-            throw CustomErrorHandler.wrongCredentials(mobile ? "Mobile not found!" : "Email not found!");
-        };
+            throw CustomErrorHandler.wrongCredentials("Mobile not found!");
+        }
 
-        let res;
-        if (mobile) {
-            res = await utils.verifyMobileOtp(userData.mobile, otp);
-        } else {
-            res = await utils.verifyEmailOtp(userData.email, otp);
-        };
-        if(!res) throw CustomErrorHandler.notAllowed(mobile ? "Failed to verify Mobile otp!" : "Failed to verify Email otp!");
+        // Check if OTP matches
+        if (userData.mobileOtp !== otp) {
+            return response.status(400).json({
+                status: false,
+                message: "Invalid OTP.",
+            });
+        }
 
-        if(mobile){
-            userData.isMobileVerified = true;
-        } else {
-            userData.isEmailVerified = true;
-        };
+        // Check OTP expiration (e.g., valid for 10 minutes)
+        const otpExpiryTime = 10 * 60 * 1000; // 10 minutes in milliseconds
+        const timeElapsed = Date.now() - new Date(userData.otpTime).getTime();
+
+        if (timeElapsed > otpExpiryTime) {
+            return response.status(400).json({
+                status: false,
+                message: "OTP has expired. Please request a new OTP.",
+            });
+        }
+
+        // Mark mobile as verified
+        userData.isMobileVerified = true;
+        userData.mobileOtp = null; // Clear the OTP after successful verification
+        userData.otpTime = null; // Clear the OTP timestamp
         await userData.save();
 
         return response.status(200).json({
-            status: res,
-            message: mobile?"Mobile Verified.":"Email Verified.",
+            status: true,
+            message: "Mobile verified successfully.",
             data: "",
         });
     } catch (e) {
@@ -284,106 +302,24 @@ module.exports.verifyOtp = async (request, response) => {
     }
 };
 
-module.exports.changePassword = async (request, response) => {
+// only for admin
+module.exports.checkUserList = async (request, response) => {
     try {
-        const { user, oldPassword, newPassword, cnfPassword } = request.body;
-        console.log(user)
+        const { user } = request.body;
+
         const userData = await UserModel.findOne({
             _id: user._id,
+            role: "ADMIN", // Role based access
             isDeleted: false
-        }).select("+password");
+        })
         if(!userData) throw CustomErrorHandler.unAuthorized("Access Denied!");
         
-        if(newPassword !== cnfPassword){
-            throw CustomErrorHandler.unAuthorized("Not Match Confirm Password!");
-        }
-
-        const checkPassword = await bcrypt.compare(oldPassword, userData.password);
-        if(!checkPassword) throw CustomErrorHandler.wrongCredentials("Not Match Current Password!");
-
-        const passwordSalt = await bcrypt.genSalt(config.SALT_ROUND);
-        const passwordHash = await bcrypt.hash(newPassword, passwordSalt);
-        
-        userData.password = passwordHash;
-        await userData.save()
+        const userList = await UserModel.find({});
 
         return response.status(200).json({
             status: true,
-            message: "Password Changed.",
-            data: "",
-        });
-    } catch (e) {
-        handleErrorResponse(e, response);
-    }
-};
-
-module.exports.forgetPasswordVerifyOtp = async (request, response) => {
-    try {
-        const { mobile, email, otp } = request.body;
-
-        const userData = await UserModel.findOne({
-            $or: [
-                { 
-                    email: email?email.toLowerCase().trim():email, 
-                    isDeleted: false, 
-                },
-                { 
-                    mobile: mobile, 
-                    isDeleted: false, 
-                }
-            ]
-        });
-        if (!userData) {
-            throw CustomErrorHandler.wrongCredentials(mobile ? "Mobile not found!" : "Email not found!");
-        };
-
-        let res;
-        if (mobile) {
-            res = await utils.verifyMobileOtp(userData.mobile, otp);
-        } else {
-            res = await utils.verifyEmailOtp(userData.email, otp);
-        };
-        if(!res) throw CustomErrorHandler.notAllowed(mobile ? "Failed to verify Mobile otp!" : "Failed to verify Email otp!");
-        
-        const sanitizedUserData = { ...userData.toObject() };
-        delete sanitizedUserData.profileImage;
-        delete sanitizedUserData.password;
-
-        const token = jwt.sign(JSON.stringify(sanitizedUserData), config.JWT_AUTH_TOKEN);
-
-        return response.json({
-            status: true,
-            message: "Use this Token for Reset Password.",
-            data: token,
-        });  
-    } catch (e) {
-        handleErrorResponse(e, response);
-    };
-};
-
-module.exports.resetPassword = async (request, response) => {
-    try {
-        const { user, newPassword, cnfPassword } = request.body;
-        
-        const userData = await UserModel.findOne({
-            _id: user._id,
-            isDeleted: false,
-        });
-        if(!userData) throw CustomErrorHandler.unAuthorized("Access Denied!");
-
-        if(newPassword !== cnfPassword){
-            throw CustomErrorHandler.unAuthorized("Not Match Confirm Password!");
-        };
-
-        const passwordSalt = await bcrypt.genSalt(config.SALT_ROUND);
-        const passwordHash = await bcrypt.hash(newPassword, passwordSalt);
-        userData.password = passwordHash;
-        userData.save();
-        
-        return response.status(200).json({
-            status: true,
-            message: "Success Reset Password.",
-            data: "",
+            message: "User list.",
+            data: userList,
         });
     } catch (e) {
         handleErrorResponse(e, response);

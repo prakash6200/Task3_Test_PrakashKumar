@@ -1,19 +1,5 @@
 const Joi = require("joi");
 
-module.exports.referralInfo = async (request, response, next) => {
-    const rules = Joi.object().keys({
-        referralCode: Joi.string().required(),
-    });
-    const { error } = rules.validate(request.query);
-    if (error) {
-        return response
-            .status(422)
-            .json({ status: false, message: error.message, data: null });
-    } else {
-        return next();
-    }
-};
-
 module.exports.signUp = async (request, response, next) => {
     const rules = Joi.object({
         name: Joi.string().min(3).max(40).required(),
@@ -75,53 +61,6 @@ module.exports.verifyOtp = async (request, response, next) => {
         mobile: Joi.string(),
         otp: Joi.number().required(),
     }).or('email', 'mobile');
-    const { error } = rules.validate(request.body);
-    if (error) {
-        return response
-            .status(422)
-            .json({ status: false, message: error.message, data: null });
-    } else {
-        return next();
-    }
-};
-
-module.exports.changePassword = async (request, response, next) => {
-    const rules = Joi.object().keys({
-        oldPassword: Joi.string().required(),
-        newPassword: Joi.string().required(),
-        cnfPassword: Joi.string().required(),
-    });
-    const { error } = rules.validate(request.body);
-    if (error) {
-        return response
-            .status(422)
-            .json({ status: false, message: error.message, data: null });
-    } else {
-        return next();
-    }
-};
-
-module.exports.forgetPasswordVerifyOtp = async (request, response, next) => {
-    const rules = Joi.object().keys({
-        email: Joi.string().email(),
-        mobile: Joi.string(),
-        otp: Joi.number().required(),
-    }).or('email', 'mobile');
-    const { error } = rules.validate(request.body);
-    if (error) {
-        return response
-            .status(422)
-            .json({ status: false, message: error.message, data: null });
-    } else {
-        return next();
-    }
-};
-
-module.exports.resetPassword = async (request, response, next) => {
-    const rules = Joi.object().keys({
-        newPassword: Joi.string().required(),
-        cnfPassword: Joi.string().required(),
-    });
     const { error } = rules.validate(request.body);
     if (error) {
         return response

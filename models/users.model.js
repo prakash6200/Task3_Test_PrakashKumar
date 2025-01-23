@@ -60,6 +60,12 @@ const User = new Schema(
             type: Boolean,
             default: false,
         },
+        mobileOtp: {
+            type: String,
+        },
+        otpTime: {
+            type: Date
+        },
         lastLogin: {
             type: Number,
         },

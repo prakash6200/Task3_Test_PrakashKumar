@@ -1,49 +1,22 @@
-const config = require("../config/config");
-// const client = require("twilio")(
-//     config.TWILIO_ACCOUNT_SID,
-//     config.TWILIO_AUTH_TOKEN,
-// );
 
-module.exports.sendOtpOnMobile = async (mobile) => {
+module.exports.sendOtpOnMobile = async (mobile, otp) => {
     try {
-        await client.verify.v2
-            .services(config.TWILIO_SERVICE_ID)
-            .verifications.create({ to: `+91${mobile}`, channel: "sms" });
+        console.log(`Otp send on mobile ${mobile} and otp is ${otp}`);
+        
+        // Implement api for send mobile otp
         return true;
     } catch (err) {
         return false;
     }
 };
 
-module.exports.sendOtpOnEmail = async (email) => {
+module.exports.sendOtpOnTelegram = async (mobile, otp) => {
     try {
-        await client.verify.v2
-            .services(config.TWILIO_SERVICE_ID)
-            .verifications.create({ to: email, channel: "email" });
-        return true;
-    } catch {
-        return false;
-    }
-};
+        console.log(`Otp send on mobile ${mobile} and otp is ${otp}`);
 
-module.exports.verifyMobileOtp = async(mobile, otp) => {
-    try {
-        await client.verify.v2
-            .services(config.TWILIO_SERVICE_ID)
-            .verificationChecks.create({ to: `+91${mobile}`, code: otp });
+        // Implement the telegram api to send otp
         return true;
-    } catch(e) {
-        return false;
-    }
-};
-
-module.exports.verifyEmailOtp = async(email, otp) => {
-    try {
-        await client.verify.v2
-            .services(config.TWILIO_SERVICE_ID)
-            .verificationChecks.create({ to: email, code: otp });
-        return true;
-    } catch(e) {
+    } catch (err) {
         return false;
     }
 };
