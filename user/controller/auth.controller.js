@@ -103,7 +103,7 @@ module.exports.signUp = async (request, response) => {
 };
 
 module.exports.login = async (request, response) => {
-    try {
+    try {console.log("hello")
         const { email, mobile, password, mobileOtp} = request.body;
 
         // Determine identifier
