@@ -4,6 +4,9 @@ const mongoosePaginate = require("mongoose-paginate-v2");
 
 const User = new Schema(
     {
+        userName: {
+            type: String,
+        },
         referralCode: {
             type: String,
             default: null,
@@ -40,6 +43,10 @@ const User = new Schema(
         password: {
             type: String,
             select: false,
+        },
+        dob: {
+            type: Date,
+            required: true,
         },
         isMobileVerified: {
             type: Boolean,

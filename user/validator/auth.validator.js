@@ -24,7 +24,8 @@ module.exports.signUp = async (request, response, next) => {
         cnfPassword: Joi.string().required(),
         referral: Joi.string(),
         isWhatsapp: Joi.boolean(),
-        isTelegram: Joi.boolean()
+        isTelegram: Joi.boolean(),
+        dob: Joi.date().required(),
     });
     
     const { error } = rules.validate(request.body);

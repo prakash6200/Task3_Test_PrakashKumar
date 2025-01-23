@@ -8,7 +8,6 @@ const { verifyJWTToken } = require("../../middleware/jwt.middleware");
 const limiteRewuest = require("../../middleware/limited.request.middleware");
 
 router.post("/register", authValidator.signUp, authController.signUp);
-router.get("/referral/info", authValidator.referralInfo, authController.referralInfo);
 router.post("/login", authValidator.login, authController.login);
 router.post("/send/otp", authValidator.sendOtp, authController.sendOtp);
 router.patch("/verify/otp", authValidator.verifyOtp, authController.verifyOtp);

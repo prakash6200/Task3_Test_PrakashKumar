@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const utils = require("../../utils/otp");
 const config = require("../../config/config");
 const UserModel = require("../../models/users.model");
+const LoginAttemptsModel = require("../../models/loginAttempts.model");
 const { generateRandomString } = require("../../helpers");
 const { handleErrorResponse, CustomErrorHandler } = require("../../middleware/CustomErrorHandler");
 
@@ -44,7 +45,7 @@ module.exports.referralInfo = async (request, response) => {
 
 module.exports.signUp = async (request, response) => {
     try {
-        const { referral, name, email, mobile, password, cnfPassword, isWhatsapp, isTelegram } = request.body;
+        const { referral, name, email, mobile, password, cnfPassword, dob, isWhatsapp, isTelegram } = request.body;
    
         const checkEmail = await UserModel.findOne({
             email: email.toLowerCase().trim(),
@@ -83,11 +84,13 @@ module.exports.signUp = async (request, response) => {
 
         //CREATING USER IN MONGODB
         const newUsers = await UserModel.create({
+            userName: referralCode.trim(),
             name: name.trim(),
             referralCode: referralCode.trim(),
             email: email.toLowerCase().trim(),
             mobile: mobile,
             password: passwordHash,
+            dob: dob,
             // isMobileVerified: true,
             fromUser: checkReferral && checkReferral._id ? checkReferral._id : null,
             isWhatsapp,
@@ -126,7 +129,7 @@ module.exports.login = async (request, response) => {
         const maxAttempts = 5;
         const lockoutTime = 60 * 60 * 1000; // 1 hour in milliseconds
 
-        let loginAttempt = await LoginAttempt.findOne(identifier);
+        let loginAttempt = await LoginAttemptsModel.findOne(identifier);
         if (loginAttempt) {
             const timeSinceLastAttempt = Date.now() - loginAttempt.lastAttemptAt.getTime();
 
@@ -159,6 +162,19 @@ module.exports.login = async (request, response) => {
                 }
             ]
         }).select("+password");
+
+        if (!userData) {
+            if (!loginAttempt) {
+                loginAttempt = new LoginAttempt({ ...identifier, attempts: 1 });
+            } else {
+                loginAttempt.attempts += 1;
+                loginAttempt.lastAttemptAt = new Date();
+            }
+            await loginAttempt.save();
+
+            throw CustomErrorHandler.wrongCredentials(mobile ? "Mobile not found!" : "Email not found!");
+        }
+
         if (!userData) {
             throw CustomErrorHandler.wrongCredentials(mobile ? "Mobile not found!" : "Email not found!");
         };
